@@ -35,7 +35,7 @@ internal final class TestBodyDeserializer: NSObject, BodyDeserializer {
 	// MARK: Implementation
 
 	/// - SeeAlso: BodyDeserializer.deserializeBody(_:)
-	internal func deserializeBody(data: NSData) -> String? {
+	internal func deserializeBody(_ data: NSData) -> String? {
 		return deserializationClosure(data)
 	}
 

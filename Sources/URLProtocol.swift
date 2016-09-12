@@ -8,23 +8,23 @@
 import Foundation
 
 /// The intercepting URL protocol.
-@objc(RDTURLProtocol) internal final class URLProtocol: NSURLProtocol, NSURLSessionTaskDelegate, NSURLSessionDataDelegate {
+@objc(RDTURLProtocol) internal final class URLProtocol: Foundation.URLProtocol, URLSessionTaskDelegate, URLSessionDataDelegate {
 	
 	/// Internal session object used to perform the request.
-	private var internalSession: NSURLSession!
+	fileprivate var internalSession: Foundation.URLSession!
 	
 	/// Internal session data dark responsible for request execution.
-	private var internalTask: NSURLSessionDataTask!
+	fileprivate var internalTask: URLSessionDataTask!
 	
 	/// Internal task response storage.
-	private var internalResponse: NSHTTPURLResponse?
+	fileprivate var internalResponse: HTTPURLResponse?
 	
 	/// Internal response data storage.
-	private lazy var internalResponseData = NSMutableData()
+	fileprivate lazy var internalResponseData = NSMutableData()
 
 	/// A unique identifier of the request. Currently its address.
-	private var requestIdentifier: String {
-		return String(unsafeAddressOf(internalTask.originalRequest!))
+	fileprivate var requestIdentifier: String {
+		return String(Unmanaged.passUnretained(internalTask.originalRequest!).toOpaque())
 	}
 	
 	// MARK: Interceptors
@@ -33,9 +33,9 @@ import Foundation
 	/// instance.
 	///
 	/// - Parameter request: The intercepted request.
-	private func interceptRequest(request: NSURLRequest) {
-		let deserializedBody = request.HTTPBody.flatMap { data in
-			ResponseDetective.deserializeBody(data, contentType: request.valueForHTTPHeaderField("Content-Type") ?? "application/octet-stream")
+	fileprivate func interceptRequest(_ request: URLRequest) {
+		let deserializedBody = request.httpBody.flatMap { data in
+			ResponseDetective.deserializeBody(data, contentType: request.value(forHTTPHeaderField: "Content-Type") ?? "application/octet-stream")
 		}
 		let requestRepresentation = RequestRepresentation(identifier: requestIdentifier, request: request, deserializedBody: deserializedBody)
 		ResponseDetective.outputFacility.outputRequestRepresentation(requestRepresentation)
@@ -47,7 +47,7 @@ import Foundation
 	/// - Parameters:
 	///     - response: The intercepted response.
 	///     - data: The intercepted response data.
-	private func interceptResponse(response: NSHTTPURLResponse, data: NSData?) {
+	fileprivate func interceptResponse(_ response: HTTPURLResponse, data: Data?) {
 		let deserializedBody = data.flatMap { data in
 			ResponseDetective.deserializeBody(data, contentType: (response.allHeaderFields["Content-Type"] as? String) ?? "application/octet-stream")
 		}
@@ -62,7 +62,7 @@ import Foundation
 	///     - error: The intercepted request.
 	///     - response: The intercepted response.
 	///     - data: The intercepted response data.
-	private func interceptError(error: NSError, response: NSHTTPURLResponse?, data: NSData?) {
+	fileprivate func interceptError(_ error: NSError, response: HTTPURLResponse?, data: Data?) {
 		let deserializedBody = response.flatMap { response in
 			return data.flatMap { data in
 				ResponseDetective.deserializeBody(data, contentType: (response.allHeaderFields["Content-Type"] as? String) ?? "application/octet-stream")
@@ -77,18 +77,18 @@ import Foundation
 	
 	// MARK: NSURLProtocol
 	
-	internal override init(request: NSURLRequest, cachedResponse: NSCachedURLResponse?, client: NSURLProtocolClient?) {
+	internal override init(request: URLRequest, cachedResponse: CachedURLResponse?, client: URLProtocolClient?) {
 		super.init(request: request, cachedResponse: cachedResponse, client: client)
-		internalSession = NSURLSession(configuration: NSURLSessionConfiguration.defaultSessionConfiguration(), delegate: self, delegateQueue: nil)
-		internalTask = internalSession.dataTaskWithRequest(request)
+		internalSession = Foundation.URLSession(configuration: URLSessionConfiguration.default, delegate: self, delegateQueue: nil)
+		internalTask = internalSession.dataTask(with: request)
 	}
 	
-	internal override static func canInitWithRequest(request: NSURLRequest) -> Bool {
-		guard let URL = request.URL else { return false }
-		return ["http", "https"].contains(URL.scheme) && ResponseDetective.canIncerceptRequest(request)
+	internal override static func canInit(with request: URLRequest) -> Bool {
+		guard let URL = request.url else { return false }
+		return ["http", "https"].contains(URL.scheme)!!!!!!! && ResponseDetective.canIncerceptRequest(request)
 	}
 	
-	internal override static func canonicalRequestForRequest(request: NSURLRequest) -> NSURLRequest {
+	internal override static func canonicalRequest(for request: URLRequest) -> URLRequest {
 		return request
 	}
 	
@@ -103,37 +103,37 @@ import Foundation
 	
 	// MARK: NSURLSessionTaskDelegate
 
-	internal func URLSession(session: NSURLSession, task: NSURLSessionTask, willPerformHTTPRedirection response: NSHTTPURLResponse, newRequest request: NSURLRequest, completionHandler: (NSURLRequest?) -> Void) {
-		client?.URLProtocol(self, wasRedirectedToRequest: request, redirectResponse: response)
+	internal func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+		client?.urlProtocol(self, wasRedirectedTo: request, redirectResponse: response)
 	}
 	
-	internal func URLSession(session: NSURLSession, task: NSURLSessionTask, didReceiveChallenge challenge: NSURLAuthenticationChallenge, completionHandler: (NSURLSessionAuthChallengeDisposition, NSURLCredential?) -> Void) {
-		client?.URLProtocol(self, didReceiveAuthenticationChallenge: challenge)
-		completionHandler(.PerformDefaultHandling, nil)
+	internal func urlSession(_ session: URLSession, task: URLSessionTask, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+		client?.urlProtocol(self, didReceive: challenge)
+		completionHandler(.performDefaultHandling, nil)
 	}
 	
-	internal func URLSession(session: NSURLSession, task: NSURLSessionTask, didCompleteWithError error: NSError?) {
+	internal func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
 		if let error = error {
-			interceptError(error, response: internalResponse, data: internalResponseData)
-			client?.URLProtocol(self, didFailWithError: error)
+			interceptError(error as NSError, response: internalResponse, data: internalResponseData as Data)
+			client?.urlProtocol(self, didFailWithError: error)
 		} else if let response = internalResponse {
-			interceptResponse(response, data: internalResponseData)
-			client?.URLProtocolDidFinishLoading(self)
+			interceptResponse(response, data: internalResponseData as Data)
+			client?.urlProtocolDidFinishLoading(self)
 		}
 		internalSession.finishTasksAndInvalidate()
 	}
 	
 	// MARK: NSURLSessionDataDelegate
 	
-	internal func URLSession(session: NSURLSession, dataTask: NSURLSessionDataTask, didReceiveResponse response: NSURLResponse, completionHandler: (NSURLSessionResponseDisposition) -> Void) {
-		internalResponse = response as? NSHTTPURLResponse
-		completionHandler(.Allow)
-		client?.URLProtocol(self, didReceiveResponse: response, cacheStoragePolicy: .Allowed)
+	internal func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+		internalResponse = response as? HTTPURLResponse
+		completionHandler(.allow)
+		client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .allowed)
 	}
 	
-	internal func URLSession(session: NSURLSession, dataTask: NSURLSessionDataTask, didReceiveData data: NSData) {
-		internalResponseData.appendData(data)
-		client?.URLProtocol(self, didLoadData: data)
+	internal func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+		internalResponseData.append(data)
+		client?.urlProtocol(self, didLoad: data)
 	}
 	
 }
