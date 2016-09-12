@@ -23,8 +23,8 @@ import Foundation
 	fileprivate lazy var internalResponseData = NSMutableData()
 
 	/// A unique identifier of the request. Currently its address.
-	fileprivate var requestIdentifier: String {
-		return String(Unmanaged.passUnretained(internalTask.originalRequest!).toOpaque())
+    fileprivate var requestIdentifier: String {
+        return String(describing: Unmanaged.passUnretained(internalTask.originalRequest! as AnyObject).toOpaque())
 	}
 	
 	// MARK: Interceptors
@@ -85,7 +85,7 @@ import Foundation
 	
 	internal override static func canInit(with request: URLRequest) -> Bool {
 		guard let URL = request.url else { return false }
-		return ["http", "https"].contains(URL.scheme)!!!!!!! && ResponseDetective.canIncerceptRequest(request)
+		return ["http", "https"].contains(URL.scheme ?? "") && ResponseDetective.canIncerceptRequest(request)
 	}
 	
 	internal override static func canonicalRequest(for request: URLRequest) -> URLRequest {
